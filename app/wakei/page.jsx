@@ -212,7 +212,7 @@ const ExcelProcessor = () => {
               <label htmlFor="file-upload" className="cursor-pointer">
                 <Upload />
                 <p className="text-lg font-medium text-gray-700 mb-2">
-                  {file ? file.name : '点击上传 Excel 文件'}
+                  {file ? file.name : 'Excelをアップロード'}
                 </p>
                 <p className="text-sm text-gray-500">
                   支持 .xlsx 和 .xls 格式
@@ -222,12 +222,12 @@ const ExcelProcessor = () => {
 
             {/* 说明文字 */}
             <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <h3 className="font-semibold text-blue-900 mb-2">处理说明：</h3>
+              <h3 className="font-semibold text-blue-900 mb-2">処理説明：</h3>
               <ul className="text-sm text-blue-800 space-y-1">
-                <li>• 按 D 列（机构）进行分组</li>
-                <li>• 提取 H 列（受信者住所1）的所有数据</li>
-                <li>• 统计 I 列（受信者住所2）的唯一值及出现次数</li>
-                <li>• 导出包含统计结果的新 Excel 文件</li>
+                <li>• 按 D 列（機関）分類</li>
+                <li>• H 列（受信者住所1）的データ抽出</li>
+                <li>• 统计 I 列（受信者住所2）的唯一值と個数</li>
+                <li>• 新たなExcel 文件エキスパート</li>
               </ul>
             </div>
 
@@ -257,7 +257,7 @@ const ExcelProcessor = () => {
                     处理中...
                   </>
                 ) : (
-                  '开始处理'
+                  '処理スタート'
                 )}
               </button>
 
