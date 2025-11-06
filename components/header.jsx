@@ -5,7 +5,7 @@ import githubLogo from 'public/images/github-mark-white.svg';
 
 const navItems = [
     { linkText: 'Home', href: '/' },
-    { linkText: 'yamato', href: '/yamato' },
+    { linkText: '業者地域分け', href: '/wakei' },
     { linkText: '賠償', href: '/baichang' },
 ];
 
