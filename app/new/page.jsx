@@ -2,7 +2,7 @@ export default function FukukoCorporateHomepage() {
   const companyInfo = [
     ["会社名", "福高国際貿易株式会社"],
     ["代表者", "代表取締役社長　陳 良鈿"],
-    ["所在地", "千葉県船橋市湊町2丁目15-21 谷ビル2階"],
+    ["所在地", "千葉県船橋市湊町2丁目15-21 翁ビル2階"],
     ["資本金", "500万円"],
     ["事業内容", "中華料理店の経営"],
   ];
@@ -23,10 +23,10 @@ export default function FukukoCorporateHomepage() {
   ];
 
   const presidentProfile = [
-    ["氏名", "陳 良鈿（CHEN LIANGXI）"],
+    ["氏名", "陳 良鈿"],
     ["国籍", "中国"],
     ["生年月日", "1973年4月27日"],
-    ["経営経験", "飲食・小売・現場管理を中心に約15年4カ月"],
+    ["経営経験", "飲食・小売・現場管理を中心に約15年"],
   ];
 
   return (
@@ -154,7 +154,7 @@ export default function FukukoCorporateHomepage() {
             </p>
             <div className="mt-6 rounded-2xl bg-white p-5 ring-1 ring-neutral-200">
               <p className="text-sm font-medium text-neutral-500">店舗所在地</p>
-              <p className="mt-1 text-sm font-semibold leading-7 text-neutral-900">千葉県船橋市湊町2丁目15-21 谷ビル2階</p>
+              <p className="mt-1 text-sm font-semibold leading-7 text-neutral-900">千葉県船橋市湊町2丁目15-21 翁ビル2階</p>
               <p className="mt-4 text-sm font-medium text-neutral-500">営業時間</p>
               <p className="mt-1 text-sm font-semibold leading-7 text-neutral-900">11:00–15:00 / 17:00–21:00</p>
             </div>
