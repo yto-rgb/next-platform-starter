@@ -29,7 +29,7 @@
         @apply text-xl font-bold;
     }
 
-    a:not(.btn) {
+    a:not(.btn):not(.nav-link) {
         @apply underline transition hover:opacity-80;
     }
 

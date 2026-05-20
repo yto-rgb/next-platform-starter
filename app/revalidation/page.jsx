@@ -11,6 +11,17 @@ const tagName = 'randomWiki';
 const randomWikiUrl = 'https://en.wikipedia.org/api/rest_v1/page/random/summary';
 const maxExtractLength = 200;
 const revalidateTTL = 60;
+const fallbackWikiArticle = {
+    title: 'Wikipedia article unavailable',
+    description: 'Local fallback content',
+    extract:
+        'The build environment could not reach Wikipedia, so this page rendered with local fallback content. Revalidation will still fetch fresh data when network access is available.',
+    content_urls: {
+        desktop: {
+            page: 'https://en.wikipedia.org/'
+        }
+    }
+};
 
 const explainer = `
 This page perfoms a \`fetch\` on the server to get a random article from Wikipedia. 
@@ -56,12 +67,23 @@ export default async function Page() {
 }
 
 async function RandomWikiArticle() {
-    const randomWiki = await fetch(randomWikiUrl, {
-        next: { revalidate: revalidateTTL, tags: [tagName] }
-    });
+    let content = fallbackWikiArticle;
 
-    const content = await randomWiki.json();
-    let extract = content.extract;
+    try {
+        const randomWiki = await fetch(randomWikiUrl, {
+            next: { revalidate: revalidateTTL, tags: [tagName] }
+        });
+
+        if (randomWiki.ok) {
+            content = await randomWiki.json();
+        }
+    } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+            console.warn('Failed to fetch random Wikipedia article:', error);
+        }
+    }
+
+    let extract = content.extract || '';
     if (extract.length > maxExtractLength) {
         extract = extract.slice(0, extract.slice(0, maxExtractLength).lastIndexOf(' ')) + ' [...]';
     }
