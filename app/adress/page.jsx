@@ -24,7 +24,7 @@ const zipKeys = ['邮编', '邮政编码', '郵便番号', '郵便', 'postalCode
 const sortCodeKeys = ['仕分けコード', '仕分コード', '仕分け', '仕分', '分拣码', '分拣代码', 'sortCode', 'sort_code'];
 const outputHeaders = ['配送公司', '代理店', '邮编', '操作类型'];
 const aColumnSortCodeKey = '__aColumnSortCode';
-const sortCodeFormat = /^\d{2}-\d{2}-\d{2}$/;
+const sortCodeFormat = /^\d{2}-[a-z0-9]{2,3}-\d{2}$/i;
 
 const iconPaths = {
     upload: 'M12 16V4m0 0 4 4m-4-4-4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',
@@ -297,7 +297,7 @@ export default function ExcelConverterWebsite() {
             if (invalidAColumnRows.length) {
                 const rowList = invalidAColumnRows.slice(0, 5).join(', ');
                 const totalText = invalidAColumnRows.length > 5 ? `；共 ${invalidAColumnRows.length} 行不符合` : '';
-                throw new Error(`上传数据 A 列格式错误：第 ${rowList} 行必须是 XX-XX-XX，例如 71-11-10${totalText}。`);
+                throw new Error(`上传数据 A 列格式错误：第 ${rowList} 行必须是 XX-XX-XX 或 XX-XXX-XX，中间段可包含数字或字母，例如 71-11B-21${totalText}。`);
             }
 
             const rows = window.XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
