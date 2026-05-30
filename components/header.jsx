@@ -33,12 +33,6 @@ const navItems = [
         icon: 'CA',
     },
     {
-        linkText: '不在票',
-        href: '/buzaipiao',
-        description: '不在票記録表',
-        icon: '💰',
-    },
-    {
         linkText: 'ヤマトデータ',
         href: '/yamatodate',
         description: 'ヤマトデータ予定確定データ',
