@@ -84,6 +84,7 @@ function isBlank(value) {
 function normalizeSortCodeValue(value) {
     return String(value ?? '')
         .normalize('NFKC')
+        .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
         .trim()
         .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u30fc\uff70\u2212]/g, '-');
 }
