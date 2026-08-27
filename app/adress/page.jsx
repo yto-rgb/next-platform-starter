@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 const XLSX_SCRIPT_ID = 'sheetjs-xlsx';
 const XLSX_SCRIPT_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 
-const carrierMap = {
+const defaultCarrierMap = {
     '10': 'SPG',
     '11': 'トラサブロウ',
     '15': 'ソフトラン',
@@ -17,12 +17,23 @@ const carrierMap = {
     '22': '株式会社CROUD',
     '33': '桃太郎（中部）',
     '34': 'ERFOLG',
+    '35': '（株）UP`s',
+    '36': 'ジャパンクイックサービス',
+    '37': 'デリバリーブーン',
+    '38': 'C.E.L',
+    '40': '柊ワークス',
+    '89': 'P.Sライン合同会社',
     '90': 'SPG'
 };
 
 const zipKeys = ['邮编', '邮政编码', '郵便番号', '郵便', 'postalCode', 'postal_code', 'postcode', 'zipcode', 'zip'];
 const sortCodeKeys = ['仕分けコード', '仕分コード', '仕分け', '仕分', '分拣码', '分拣代码', 'sortCode', 'sort_code'];
-const outputHeaders = ['配送公司', '代理店', '邮编', '操作类型'];
+const outputHeaders = ['belongTo', 'agencyBelongTo', 'plannedDeliveryMethod', 'deliveryPostalCode', 'flag'];
+const deliveryMethodOptions = [
+    { value: '0', label: '0 - 置き配' },
+    { value: '1', label: '1 - ポスト投函' },
+    { value: '2', label: '2 - 対面配達' }
+];
 const aColumnSortCodeKey = '__aColumnSortCode';
 const sortCodeFormat = /^\d{2}-[a-z0-9]{2,3}-\d{2}$/i;
 
@@ -164,7 +175,13 @@ function getCell(row, keys) {
     return '';
 }
 
-function getSortCodePrefix(value) {
+function normalizeCarrierCode(value) {
+    return String(value ?? '')
+        .normalize('NFKC')
+        .replace(/[^0-9]/g, '');
+}
+
+function getSortCodePrefix(value, carrierMap) {
     if (value === undefined || value === null) return '';
     const text = String(value)
         .normalize('NFKC')
@@ -179,12 +196,12 @@ function getSortCodePrefix(value) {
     return carrierMap[suffix] ? suffix : '';
 }
 
-function getCarrierCodeFromRow(row) {
-    const aColumnCarrierCode = getSortCodePrefix(row[aColumnSortCodeKey]);
+function getCarrierCodeFromRow(row, carrierMap) {
+    const aColumnCarrierCode = getSortCodePrefix(row[aColumnSortCodeKey], carrierMap);
     if (aColumnCarrierCode) return aColumnCarrierCode;
 
     const sortCode = getCell(row, sortCodeKeys);
-    const carrierCode = getSortCodePrefix(sortCode);
+    const carrierCode = getSortCodePrefix(sortCode, carrierMap);
     if (carrierCode) return carrierCode;
 
     for (const [key, value] of Object.entries(row)) {
@@ -192,7 +209,7 @@ function getCarrierCodeFromRow(row) {
         const looksLikeSortCodeColumn = normalizedKey.includes('仕分') || normalizedKey.includes('分拣') || normalizedKey.includes('sort');
 
         if (looksLikeSortCodeColumn) {
-            const inferredCode = getSortCodePrefix(value);
+            const inferredCode = getSortCodePrefix(value, carrierMap);
             if (inferredCode) return inferredCode;
         }
     }
@@ -226,7 +243,12 @@ export default function ExcelConverterWebsite() {
     const [fileName, setFileName] = useState('');
     const [sourceRows, setSourceRows] = useState([]);
     const [agents, setAgents] = useState(['']);
+    const [carrierMap, setCarrierMap] = useState(defaultCarrierMap);
+    const [newCarrierCode, setNewCarrierCode] = useState('');
+    const [newCarrierName, setNewCarrierName] = useState('');
+    const [carrierMessage, setCarrierMessage] = useState('');
     const [operation, setOperation] = useState('1');
+    const [plannedDeliveryMethod, setPlannedDeliveryMethod] = useState('0');
     const [manualCarrierCode, setManualCarrierCode] = useState('');
     const [useManualCarrier, setUseManualCarrier] = useState(false);
     const [xlsxReady, setXlsxReady] = useState(false);
@@ -244,12 +266,14 @@ export default function ExcelConverterWebsite() {
 
     const carrierOptions = useMemo(
         () =>
-            Object.entries(carrierMap).map(([code, name]) => ({
-                code,
-                name,
-                label: `${code} - ${name}`
-            })),
-        []
+            Object.entries(carrierMap)
+                .sort(([leftCode], [rightCode]) => Number(leftCode) - Number(rightCode))
+                .map(([code, name]) => ({
+                    code,
+                    name,
+                    label: `${code} - ${name}`
+                })),
+        [carrierMap]
     );
 
     const outputRows = useMemo(() => {
@@ -259,17 +283,18 @@ export default function ExcelConverterWebsite() {
             const zip = normalizeZip(getCell(row, zipKeys));
             if (!zip) return [];
 
-            const carrierCode = useManualCarrier ? manualCarrierCode : getCarrierCodeFromRow(row);
+            const carrierCode = useManualCarrier ? manualCarrierCode : getCarrierCodeFromRow(row, carrierMap);
             const carrierName = carrierMap[carrierCode] || carrierCode || '';
 
             return validAgents.map((agent) => ({
-                配送公司: carrierName,
-                代理店: agent,
-                邮编: zip,
-                操作类型: operation
+                belongTo: carrierName,
+                agencyBelongTo: agent,
+                plannedDeliveryMethod,
+                deliveryPostalCode: zip,
+                flag: operation
             }));
         });
-    }, [sourceRows, agents, operation, manualCarrierCode, useManualCarrier]);
+    }, [sourceRows, agents, operation, plannedDeliveryMethod, manualCarrierCode, useManualCarrier, carrierMap]);
 
     const handleFile = async (event) => {
         const file = event.target.files?.[0];
@@ -322,10 +347,54 @@ export default function ExcelConverterWebsite() {
         });
     };
 
+    const addCarrier = () => {
+        const code = normalizeCarrierCode(newCarrierCode);
+        const name = newCarrierName.trim();
+
+        if (!/^\d{2}$/.test(code)) {
+            setCarrierMessage('配送公司代码请输入 2 位数字。');
+            return;
+        }
+
+        if (!name) {
+            setCarrierMessage('请输入配送公司名称。');
+            return;
+        }
+
+        setCarrierMap((current) => ({
+            ...current,
+            [code]: name
+        }));
+        setNewCarrierCode('');
+        setNewCarrierName('');
+        setCarrierMessage(`${code} - ${name} 已保存。`);
+    };
+
+    const removeCarrier = (code) => {
+        const carrierName = carrierMap[code] || '';
+        const targetLabel = carrierName ? `${code} - ${carrierName}` : code;
+
+        if (!window.confirm(`确定要删除配送公司 ${targetLabel} 吗？`)) {
+            return;
+        }
+
+        setCarrierMap((current) => {
+            const next = { ...current };
+            delete next[code];
+            return next;
+        });
+
+        if (manualCarrierCode === code) {
+            setManualCarrierCode('');
+        }
+
+        setCarrierMessage(`${targetLabel} 已删除。`);
+    };
+
     const downloadExcel = () => {
         if (!outputRows.length || !window.XLSX) return;
 
-        const worksheet = window.XLSX.utils.json_to_sheet(outputRows, { header: outputHeaders, skipHeader: true });
+        const worksheet = window.XLSX.utils.json_to_sheet(outputRows, { header: outputHeaders });
         const workbook = window.XLSX.utils.book_new();
         window.XLSX.utils.book_append_sheet(workbook, worksheet, '关系表');
         window.XLSX.writeFile(workbook, '代理店配送公司关系表.xlsx');
@@ -339,12 +408,12 @@ export default function ExcelConverterWebsite() {
                         <div>
                             <h1 className="text-3xl font-bold text-slate-950">Excel 关系表生成工具</h1>
                             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                上传 Excel 后，按邮编和仕分けコード生成配送公司、代理店、邮编、操作类型四列数据。
+                                上传 Excel 后，按邮编和仕分けコード生成 belongTo、agencyBelongTo、plannedDeliveryMethod、deliveryPostalCode、flag 五列数据。
                             </p>
                         </div>
                         <div className="rounded-md bg-slate-100 px-4 py-3 text-sm text-slate-600">
                             <div className="font-semibold text-slate-900">输出列</div>
-                            <div className="mt-1">配送公司 / 代理店 / 邮编 / 操作类型</div>
+                            <div className="mt-1 max-w-md break-words">belongTo / agencyBelongTo / plannedDeliveryMethod / deliveryPostalCode / flag</div>
                         </div>
                     </div>
                 </section>
@@ -371,6 +440,21 @@ export default function ExcelConverterWebsite() {
                                     <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} disabled={!xlsxReady} />
                                 </label>
                                 {fileName && <p className="mt-3 text-sm text-slate-600">已上传：{fileName}</p>}
+                            </div>
+
+                            <div>
+                                <h2 className="text-xl font-semibold text-slate-950">配服务</h2>
+                                <select
+                                    value={plannedDeliveryMethod}
+                                    onChange={(event) => setPlannedDeliveryMethod(event.target.value)}
+                                    className="mt-3 w-full rounded-md border border-slate-300 bg-white p-3 text-sm text-slate-900"
+                                >
+                                    {deliveryMethodOptions.map((item) => (
+                                        <option key={item.value} value={item.value}>
+                                            {item.label}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div>
@@ -410,6 +494,48 @@ export default function ExcelConverterWebsite() {
                                             ))}
                                         </select>
                                     )}
+                                    <details className="border-t border-slate-200 pt-4">
+                                        <summary className="cursor-pointer text-sm font-semibold text-slate-900">配送公司维护</summary>
+                                        <div className="mt-3 grid gap-2 sm:grid-cols-[80px_1fr_auto]">
+                                            <input
+                                                value={newCarrierCode}
+                                                onChange={(event) => setNewCarrierCode(normalizeCarrierCode(event.target.value).slice(0, 2))}
+                                                placeholder="代码"
+                                                inputMode="numeric"
+                                                maxLength={2}
+                                                className="rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-900"
+                                            />
+                                            <input
+                                                value={newCarrierName}
+                                                onChange={(event) => setNewCarrierName(event.target.value)}
+                                                placeholder="配送公司名"
+                                                className="min-w-0 rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-900"
+                                            />
+                                            <Button type="button" onClick={addCarrier} className="h-9 px-3">
+                                                <Icon name="plus" className="h-4 w-4" /> 添加
+                                            </Button>
+                                        </div>
+                                        {carrierMessage && <p className="mt-2 text-xs text-slate-500">{carrierMessage}</p>}
+                                        <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-slate-200 bg-white">
+                                            {carrierOptions.map((item) => (
+                                                <div key={item.code} className="flex items-center gap-3 border-t border-slate-100 px-3 py-2 first:border-t-0">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-sm font-semibold text-slate-900">{item.code}</div>
+                                                        <div className="truncate text-xs text-slate-500">{item.name}</div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeCarrier(item.code)}
+                                                        disabled={carrierOptions.length === 1}
+                                                        aria-label={`${item.code} を削除`}
+                                                        className="shrink-0 text-sm font-semibold text-red-600 transition hover:text-red-700 disabled:cursor-not-allowed disabled:text-slate-300"
+                                                    >
+                                                        删除
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </details>
                                 </div>
                             </div>
                         </div>
@@ -469,7 +595,7 @@ export default function ExcelConverterWebsite() {
                             </div>
 
                             <div className="overflow-x-auto rounded-lg border border-slate-200">
-                                <table className="w-full min-w-[640px] text-left text-sm">
+                                <table className="w-full min-w-[860px] text-left text-sm">
                                     <thead className="bg-slate-100 text-slate-600">
                                         <tr>
                                             {outputHeaders.map((header) => (
@@ -482,16 +608,17 @@ export default function ExcelConverterWebsite() {
                                     <tbody>
                                         {outputRows.length ? (
                                             outputRows.slice(0, 10).map((row, index) => (
-                                                <tr key={`${row.邮编}-${row.代理店}-${index}`} className="border-t border-slate-100">
-                                                    <td className="p-3">{row.配送公司}</td>
-                                                    <td className="p-3 font-semibold">{row.代理店}</td>
-                                                    <td className="p-3">{row.邮编}</td>
-                                                    <td className="p-3">{row.操作类型}</td>
+                                                <tr key={`${row.deliveryPostalCode}-${row.agencyBelongTo}-${index}`} className="border-t border-slate-100">
+                                                    <td className="p-3">{row.belongTo}</td>
+                                                    <td className="p-3 font-semibold">{row.agencyBelongTo}</td>
+                                                    <td className="p-3">{row.plannedDeliveryMethod}</td>
+                                                    <td className="p-3">{row.deliveryPostalCode}</td>
+                                                    <td className="p-3">{row.flag}</td>
                                                 </tr>
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={4} className="p-8 text-center text-slate-500">
+                                                <td colSpan={5} className="p-8 text-center text-slate-500">
                                                     上传 Excel 并填写代理店后会显示预览
                                                 </td>
                                             </tr>
