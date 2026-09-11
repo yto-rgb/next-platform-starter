@@ -26,7 +26,34 @@ const defaultCarrierMap = {
     '90': 'SPG'
 };
 
-const zipKeys = ['邮编', '邮政编码', '郵便番号', '郵便', 'postalCode', 'postal_code', 'postcode', 'zipcode', 'zip'];
+const zipKeys = [
+    '邮编',
+    '邮政编码',
+    '收件人邮编',
+    '收件邮编',
+    '收货邮编',
+    '目的地邮编',
+    '郵便番号',
+    '郵便',
+    '配送先郵便番号',
+    '配達先郵便番号',
+    'お届け先郵便番号',
+    '届け先郵便番号',
+    'postalCode',
+    'postal_code',
+    'postal code',
+    'postcode',
+    'zipCode',
+    'zipcode',
+    'zip',
+    'deliveryPostalCode',
+    'delivery_postal_code',
+    'delivery postal code',
+    'recipientPostalCode',
+    'recipient_postal_code',
+    'consigneeZipcode',
+    'consignee_zipcode'
+];
 const sortCodeKeys = ['仕分けコード', '仕分コード', '仕分け', '仕分', '分拣码', '分拣代码', 'sortCode', 'sort_code'];
 const outputHeaders = ['belongTo', 'agencyBelongTo', 'plannedDeliveryMethod', 'deliveryPostalCode', 'flag'];
 const deliveryMethodOptions = [
@@ -35,6 +62,7 @@ const deliveryMethodOptions = [
     { value: '2', label: '2 - 対面配達' }
 ];
 const aColumnSortCodeKey = '__aColumnSortCode';
+const rawColumnValuesKey = '__rawColumnValues';
 const sortCodeFormat = /^\d{2}-[a-z0-9]{2,3}-\d{2}$/i;
 
 const iconPaths = {
@@ -80,6 +108,25 @@ function normalizeZip(value) {
     return digits.padStart(7, '0').slice(-7);
 }
 
+function getZipCandidate(value) {
+    const compactText = String(value ?? '')
+        .normalize('NFKC')
+        .trim()
+        .replace(/[\s\u3000]/g, '');
+
+    if (!compactText) return '';
+
+    const postalText = compactText.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u30fc\uff70\u2212]/g, '-');
+
+    if (!/^[0-9-]+$/.test(postalText)) return '';
+
+    const digits = postalText.replace(/[^0-9]/g, '');
+    if (!/^\d{6,7}$/.test(digits)) return '';
+
+    const hasPostalShape = /^\d{3}-?\d{3,4}$/.test(postalText);
+    return hasPostalShape ? normalizeZip(digits) : '';
+}
+
 function normalizeLookupKey(value) {
     return String(value ?? '')
         .normalize('NFKC')
@@ -120,6 +167,17 @@ function getAColumnSortCode(sheet, xlsx, rowIndex) {
     return normalizeSortCodeValue(getCellDisplayValue(sheet[cellAddress]));
 }
 
+function getRowDisplayValues(sheet, xlsx, rowIndex, range) {
+    const values = [];
+
+    for (let columnIndex = range.s.c; columnIndex <= range.e.c; columnIndex += 1) {
+        const cellAddress = xlsx.utils.encode_cell({ c: columnIndex, r: rowIndex });
+        values.push(getCellDisplayValue(sheet[cellAddress]));
+    }
+
+    return values;
+}
+
 function getInvalidAColumnSortCodeRows(sheet, xlsx) {
     const ref = sheet['!ref'];
     if (!ref) return [];
@@ -138,13 +196,17 @@ function getInvalidAColumnSortCodeRows(sheet, xlsx) {
     return invalidRows;
 }
 
-function attachAColumnSortCodes(rows, sheet, xlsx) {
+function attachSheetMetadata(rows, sheet, xlsx) {
+    const ref = sheet['!ref'];
+    const range = ref ? xlsx.utils.decode_range(ref) : null;
+
     return rows.map((row, index) => {
         const rowIndex = typeof row.__rowNum__ === 'number' ? row.__rowNum__ : index + 1;
 
         return {
             ...row,
-            [aColumnSortCodeKey]: getAColumnSortCode(sheet, xlsx, rowIndex)
+            [aColumnSortCodeKey]: getAColumnSortCode(sheet, xlsx, rowIndex),
+            [rawColumnValuesKey]: range ? getRowDisplayValues(sheet, xlsx, rowIndex, range) : []
         };
     });
 }
@@ -170,6 +232,21 @@ function getCell(row, keys) {
         if (keyMatched) {
             return value;
         }
+    }
+
+    return '';
+}
+
+function getZipFromRow(row) {
+    const zipFromMatchedHeader = normalizeZip(getCell(row, zipKeys));
+    if (zipFromMatchedHeader) return zipFromMatchedHeader;
+
+    const rawColumnValues = row[rawColumnValuesKey];
+    if (!Array.isArray(rawColumnValues)) return '';
+
+    for (const value of rawColumnValues) {
+        const zip = getZipCandidate(value);
+        if (zip) return zip;
     }
 
     return '';
@@ -276,11 +353,15 @@ export default function ExcelConverterWebsite() {
         [carrierMap]
     );
 
-    const outputRows = useMemo(() => {
-        const validAgents = agents.map((value) => value.trim()).filter(Boolean);
+    const validAgents = useMemo(() => agents.map((value) => value.trim()).filter(Boolean), [agents]);
+    const rowsWithZipCount = useMemo(
+        () => sourceRows.reduce((count, row) => count + (getZipFromRow(row) ? 1 : 0), 0),
+        [sourceRows]
+    );
 
+    const outputRows = useMemo(() => {
         return sourceRows.flatMap((row) => {
-            const zip = normalizeZip(getCell(row, zipKeys));
+            const zip = getZipFromRow(row);
             if (!zip) return [];
 
             const carrierCode = useManualCarrier ? manualCarrierCode : getCarrierCodeFromRow(row, carrierMap);
@@ -294,7 +375,17 @@ export default function ExcelConverterWebsite() {
                 flag: operation
             }));
         });
-    }, [sourceRows, agents, operation, plannedDeliveryMethod, manualCarrierCode, useManualCarrier, carrierMap]);
+    }, [sourceRows, validAgents, operation, plannedDeliveryMethod, manualCarrierCode, useManualCarrier, carrierMap]);
+
+    const emptyPreviewText = useMemo(() => {
+        if (!sourceRows.length) return '上传 Excel 并填写代理店后会显示预览';
+        if (!validAgents.length) return '请填写至少一个代理店后再生成。';
+        if (!rowsWithZipCount) {
+            return '已读取 Excel，但没有识别到邮编。请确认邮编列表头或单元格格式类似 123-4567 / 1234567。';
+        }
+
+        return '没有生成结果，请检查筛选条件。';
+    }, [sourceRows.length, validAgents.length, rowsWithZipCount]);
 
     const handleFile = async (event) => {
         const file = event.target.files?.[0];
@@ -327,7 +418,7 @@ export default function ExcelConverterWebsite() {
             }
 
             const rows = window.XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
-            setSourceRows(attachAColumnSortCodes(rows, sheet, window.XLSX));
+            setSourceRows(attachSheetMetadata(rows, sheet, window.XLSX));
         } catch (err) {
             setSourceRows([]);
             setError(err.message || 'Excel 文件读取失败。');
@@ -580,13 +671,20 @@ export default function ExcelConverterWebsite() {
                                 </div>
                                 <div className="rounded-lg bg-slate-100 p-4">
                                     <div className="text-sm text-slate-500">代理店数量</div>
-                                    <div className="mt-1 text-2xl font-bold text-slate-950">{agents.filter((value) => value.trim()).length}</div>
+                                    <div className="mt-1 text-2xl font-bold text-slate-950">{validAgents.length}</div>
                                 </div>
                                 <div className="rounded-lg bg-slate-100 p-4">
                                     <div className="text-sm text-slate-500">生成行数</div>
                                     <div className="mt-1 text-2xl font-bold text-slate-950">{outputRows.length}</div>
                                 </div>
                             </div>
+
+                            {sourceRows.length > 0 && validAgents.length > 0 && rowsWithZipCount === 0 && (
+                                <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                                    已读取 {sourceRows.length} 行，但没有识别到可用邮编。请确认邮编列为 123-4567 或 1234567
+                                    格式；如果表头特殊，也可以直接保留当前格式重新上传试试。
+                                </div>
+                            )}
 
                             <div className="flex justify-end">
                                 <Button type="button" onClick={downloadExcel} disabled={!outputRows.length || !xlsxReady}>
@@ -619,7 +717,7 @@ export default function ExcelConverterWebsite() {
                                         ) : (
                                             <tr>
                                                 <td colSpan={5} className="p-8 text-center text-slate-500">
-                                                    上传 Excel 并填写代理店后会显示预览
+                                                    {emptyPreviewText}
                                                 </td>
                                             </tr>
                                         )}
