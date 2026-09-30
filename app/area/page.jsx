@@ -16,6 +16,18 @@ const XLSX_SCRIPT_SRC = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full
 
 const DEFAULT_KANTO = ['東京都', '神奈川県', '埼玉県', '千葉県', '茨城県', '栃木県', '群馬県'];
 const DEFAULT_KANSAI = ['大阪府', '京都府', '兵庫県', '奈良県', '滋賀県', '和歌山県'];
+const AREA_SETTINGS_KEY = 'area-split-settings-v1';
+
+function validateSettings(settings) {
+    if (!settings || typeof settings.kantoText !== 'string' || typeof settings.kansaiText !== 'string' || typeof settings.includeUnmatched !== 'boolean') {
+        throw new Error('保存的设置格式不正确，请重新设置并保存。');
+    }
+    const kanto = makeAreaSet(settings.kantoText);
+    const kansai = makeAreaSet(settings.kansaiText);
+    if (!kanto.size || !kansai.size) throw new Error('关东和关西区域至少各填写一个。');
+    const duplicates = [...kanto].filter(([key]) => kansai.has(key)).map(([, label]) => label);
+    if (duplicates.length) throw new Error(`关东/关西不能包含重复区域：${duplicates.join('、')}`);
+}
 
 const statusStyles = {
     idle: 'border-slate-200 bg-white text-slate-700',
@@ -255,10 +267,32 @@ export default function AreaSplitPage() {
     const [kantoText, setKantoText] = useState(DEFAULT_KANTO.join('\n'));
     const [kansaiText, setKansaiText] = useState(DEFAULT_KANSAI.join('\n'));
     const [includeUnmatched, setIncludeUnmatched] = useState(true);
+    const [settingsReady, setSettingsReady] = useState(false);
+    const [savedSettings, setSavedSettings] = useState(null);
+    const [settingsStatus, setSettingsStatus] = useState(null);
     const [status, setStatus] = useState({
         type: 'loading',
         text: 'Excel 解析库加载中...'
     });
+
+    useEffect(() => {
+        try {
+            const stored = window.localStorage.getItem(AREA_SETTINGS_KEY);
+            if (stored !== null) {
+                const settings = JSON.parse(stored);
+                validateSettings(settings);
+                setKantoText(settings.kantoText);
+                setKansaiText(settings.kansaiText);
+                setIncludeUnmatched(settings.includeUnmatched);
+                setSavedSettings(settings);
+                setSettingsStatus({ type: 'ok', text: '已加载保存的区域设置。' });
+            }
+        } catch {
+            setSettingsStatus({ type: 'warn', text: '无法读取保存的设置，已使用默认值。可以重新编辑并保存。' });
+        } finally {
+            setSettingsReady(true);
+        }
+    }, []);
 
     useEffect(() => {
         ensureXlsxLoaded(
@@ -277,6 +311,38 @@ export default function AreaSplitPage() {
 
     const kantoAreas = useMemo(() => makeAreaSet(kantoText), [kantoText]);
     const kansaiAreas = useMemo(() => makeAreaSet(kansaiText), [kansaiText]);
+    const settingsChanged = !savedSettings || kantoText !== savedSettings.kantoText ||
+        kansaiText !== savedSettings.kansaiText || includeUnmatched !== savedSettings.includeUnmatched;
+
+    const saveSettings = () => {
+        const settings = {
+            kantoText: [...kantoAreas.values()].join('\n'),
+            kansaiText: [...kansaiAreas.values()].join('\n'),
+            includeUnmatched
+        };
+        try {
+            validateSettings(settings);
+        } catch (error) {
+            setSettingsStatus({ type: 'error', text: error.message });
+            return;
+        }
+        try {
+            window.localStorage.setItem(AREA_SETTINGS_KEY, JSON.stringify(settings));
+            setKantoText(settings.kantoText);
+            setKansaiText(settings.kansaiText);
+            setSavedSettings(settings);
+            setSettingsStatus({ type: 'ok', text: '设置已保存，下次打开时自动使用。' });
+        } catch {
+            setSettingsStatus({ type: 'error', text: '保存失败，请允许浏览器存储后重试。当前修改仍可用于本次分类。' });
+        }
+    };
+
+    const resetSettings = () => {
+        setKantoText(DEFAULT_KANTO.join('\n'));
+        setKansaiText(DEFAULT_KANSAI.join('\n'));
+        setIncludeUnmatched(true);
+        setSettingsStatus({ type: 'idle', text: '已恢复默认值，点击“保存设置”可保留此更改。' });
+    };
 
     const duplicateAreas = useMemo(() => {
         const duplicates = [];
@@ -509,19 +575,26 @@ export default function AreaSplitPage() {
                                     区域
                                 </h2>
                                 <div className="mt-4 grid gap-4">
+                                    <p id="area-settings-help" className="text-xs leading-5 text-slate-500">
+                                        可直接编辑，每行填写一个地区，也可用逗号分隔。修改后立即更新分类，保存后刷新仍保留。设置仅保存在当前浏览器。
+                                    </p>
                                     <label className="block">
                                         <span className="text-sm font-semibold text-slate-700">关东</span>
                                         <textarea
+                                            disabled={!settingsReady}
+                                            aria-describedby="area-settings-help"
                                             value={kantoText}
-                                            onChange={(event) => setKantoText(event.target.value)}
+                                            onChange={(event) => { setKantoText(event.target.value); setSettingsStatus(null); }}
                                             className="mt-2 h-32 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                                         />
                                     </label>
                                     <label className="block">
                                         <span className="text-sm font-semibold text-slate-700">关西</span>
                                         <textarea
+                                            disabled={!settingsReady}
+                                            aria-describedby="area-settings-help"
                                             value={kansaiText}
-                                            onChange={(event) => setKansaiText(event.target.value)}
+                                            onChange={(event) => { setKansaiText(event.target.value); setSettingsStatus(null); }}
                                             className="mt-2 h-32 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                                         />
                                     </label>
@@ -529,12 +602,25 @@ export default function AreaSplitPage() {
                                 <label className="mt-4 flex items-center gap-3 rounded-lg bg-slate-50 p-4 text-sm font-medium text-slate-700">
                                     <input
                                         type="checkbox"
+                                        disabled={!settingsReady}
                                         checked={includeUnmatched}
-                                        onChange={(event) => setIncludeUnmatched(event.target.checked)}
+                                        onChange={(event) => { setIncludeUnmatched(event.target.checked); setSettingsStatus(null); }}
                                         className="h-4 w-4 rounded border-slate-300 text-slate-950"
                                     />
                                     导出未分类 sheet
                                 </label>
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                    <Button type="button" onClick={saveSettings} disabled={!settingsReady || !settingsChanged}>
+                                        保存设置
+                                    </Button>
+                                    <Button type="button" variant="secondary" onClick={resetSettings} disabled={!settingsReady}>
+                                        恢复默认
+                                    </Button>
+                                </div>
+                                <div className="mt-3 space-y-2" aria-live="polite">
+                                    {settingsReady && settingsChanged && <p className="text-xs text-amber-700">当前设置尚未保存。</p>}
+                                    {settingsStatus && <StatusBox status={settingsStatus} />}
+                                </div>
                             </div>
 
                             <StatusBox status={{ type: statusType, text: statusText }} />
