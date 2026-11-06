@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 const XLSX_SCRIPT_ID = 'sheetjs-xlsx';
 const XLSX_SCRIPT_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const CARRIER_STORAGE_KEY = 'adress-carrier-map-v1';
 
 const defaultCarrierMap = {
     '10': 'SPG',
@@ -14,7 +15,7 @@ const defaultCarrierMap = {
     '18': 'MJ CONNECT',
     '19': 'P.Sライン合同会社',
     '21': 'TMG',
-    '22': '株式会社CROUD',
+    '22': '株式会社CRAUD',
     '33': '桃太郎（中部）',
     '34': 'ERFOLG',
     '35': '（株）UP`s',
@@ -320,7 +321,8 @@ export default function ExcelConverterWebsite() {
     const [fileName, setFileName] = useState('');
     const [sourceRows, setSourceRows] = useState([]);
     const [agents, setAgents] = useState(['']);
-    const [carrierMap, setCarrierMap] = useState(defaultCarrierMap);
+    const [carrierMap, setCarrierMap] = useState({});
+    const [carrierReady, setCarrierReady] = useState(false);
     const [newCarrierCode, setNewCarrierCode] = useState('');
     const [newCarrierName, setNewCarrierName] = useState('');
     const [carrierMessage, setCarrierMessage] = useState('');
@@ -330,6 +332,22 @@ export default function ExcelConverterWebsite() {
     const [useManualCarrier, setUseManualCarrier] = useState(false);
     const [xlsxReady, setXlsxReady] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        try {
+            const saved = window.localStorage.getItem(CARRIER_STORAGE_KEY);
+            const parsed = saved === null ? defaultCarrierMap : JSON.parse(saved);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+                Object.entries(parsed).some(([code, name]) => !/^\d{2}$/.test(code) || typeof name !== 'string')) {
+                throw new Error('Invalid carrier settings');
+            }
+            if (saved === null) window.localStorage.setItem(CARRIER_STORAGE_KEY, JSON.stringify(parsed));
+            setCarrierMap(parsed);
+            setCarrierReady(true);
+        } catch {
+            setCarrierMessage('配送公司设置读取失败，请检查浏览器存储是否可用。');
+        }
+    }, []);
 
     useEffect(() => {
         ensureXlsxLoaded(
@@ -452,10 +470,14 @@ export default function ExcelConverterWebsite() {
             return;
         }
 
-        setCarrierMap((current) => ({
-            ...current,
-            [code]: name
-        }));
+        const next = { ...carrierMap, [code]: name };
+        try {
+            window.localStorage.setItem(CARRIER_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+            setCarrierMessage('保存失败，请检查浏览器存储是否可用。');
+            return;
+        }
+        setCarrierMap(next);
         setNewCarrierCode('');
         setNewCarrierName('');
         setCarrierMessage(`${code} - ${name} 已保存。`);
@@ -469,11 +491,15 @@ export default function ExcelConverterWebsite() {
             return;
         }
 
-        setCarrierMap((current) => {
-            const next = { ...current };
-            delete next[code];
-            return next;
-        });
+        const next = { ...carrierMap };
+        delete next[code];
+        try {
+            window.localStorage.setItem(CARRIER_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+            setCarrierMessage('删除失败，请检查浏览器存储是否可用。');
+            return;
+        }
+        setCarrierMap(next);
 
         if (manualCarrierCode === code) {
             setManualCarrierCode('');
@@ -602,8 +628,8 @@ export default function ExcelConverterWebsite() {
                                                 placeholder="配送公司名"
                                                 className="min-w-0 rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-900"
                                             />
-                                            <Button type="button" onClick={addCarrier} className="h-9 px-3">
-                                                <Icon name="plus" className="h-4 w-4" /> 添加
+                                            <Button type="button" onClick={addCarrier} disabled={!carrierReady} className="h-9 px-3">
+                                                <Icon name="plus" className="h-4 w-4" /> 保存
                                             </Button>
                                         </div>
                                         {carrierMessage && <p className="mt-2 text-xs text-slate-500">{carrierMessage}</p>}
@@ -616,8 +642,19 @@ export default function ExcelConverterWebsite() {
                                                     </div>
                                                     <button
                                                         type="button"
+                                                        onClick={() => {
+                                                            setNewCarrierCode(item.code);
+                                                            setNewCarrierName(item.name);
+                                                            setCarrierMessage('修改名称后点击保存。');
+                                                        }}
+                                                        className="shrink-0 text-sm font-semibold text-slate-600 hover:text-slate-900"
+                                                    >
+                                                        修改
+                                                    </button>
+                                                    <button
+                                                        type="button"
                                                         onClick={() => removeCarrier(item.code)}
-                                                        disabled={carrierOptions.length === 1}
+                                                        disabled={!carrierReady}
                                                         aria-label={`${item.code} を削除`}
                                                         className="shrink-0 text-sm font-semibold text-red-600 transition hover:text-red-700 disabled:cursor-not-allowed disabled:text-slate-300"
                                                     >
