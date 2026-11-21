@@ -77,3 +77,15 @@ export function extractRows(rows, date, agentList, nyKeyword) {
 
     return { results, issues };
 }
+
+export function summarizeAgents(results) {
+    const numbersByAgent = new Map();
+    for (const { agent, master } of results) {
+        if (!numbersByAgent.has(agent)) numbersByAgent.set(agent, new Set());
+        numbersByAgent.get(agent).add(master);
+    }
+
+    const agents = Array.from(numbersByAgent, ([agent, numbers]) => ({ agent, count: numbers.size }));
+    agents.sort((a, b) => b.count - a.count || a.agent.localeCompare(b.agent, 'en'));
+    return { agents, total: agents.reduce((sum, entry) => sum + entry.count, 0) };
+}

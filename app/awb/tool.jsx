@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createOcrWorker, OCR_COLUMNS, recognizeScreenshot } from './ocr.mjs';
-import { dateKey, dateLabel, DEFAULT_AGENTS, DEFAULT_NY_KEYWORD, extractRows } from './rules.mjs';
+import { dateKey, dateLabel, DEFAULT_AGENTS, DEFAULT_NY_KEYWORD, extractRows, summarizeAgents } from './rules.mjs';
 
 const SETTINGS_KEY = 'work-tools:awb-settings-v1';
 const INPUT = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-emerald-600 disabled:bg-slate-100';
@@ -28,6 +28,7 @@ export default function AwbTool() {
     const dates = [...new Set(rows.map(row => dateKey(row.date)).filter(Boolean))].sort();
     const filterDate = dates.includes(date) ? date : (dates.length === 1 ? dates[0] : '');
     const { results, issues } = extractRows(rows, filterDate, agents, keyword);
+    const totals = summarizeAgents(results);
     const text = results.map(row => [row.master, row.agent, row.pieces].join('\t')).join('\n');
     const issuesByRow = new Map(issues.map(issue => [issue.row.id, issue.reason]));
     const needsReview = new Set([...issuesByRow.keys(), ...results.filter(result => result.row.uncertain).map(result => result.row.id)]).size;
@@ -232,6 +233,37 @@ export default function AwbTool() {
                             {copyStatus && <span role="status" className="text-sm text-emerald-800">{copyStatus}</span>}
                         </div>
                     </div>
+                    {!!rows.length && (
+                        <section aria-labelledby="awb-agent-totals" className="space-y-2 border-t border-slate-200 pt-4">
+                            <h3 id="awb-agent-totals" className="text-base font-bold">按代理汇总</h3>
+                            <div className="overflow-hidden rounded-md border border-slate-200">
+                                <table aria-labelledby="awb-agent-totals" className="w-full text-sm">
+                                    <thead className="bg-slate-50 text-slate-700">
+                                        <tr>
+                                            <th scope="col" className="px-3 py-2 text-left">代理</th>
+                                            <th scope="col" className="px-3 py-2 text-right">主单号数</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {totals.agents.map(({ agent, count }) => (
+                                            <tr key={agent}>
+                                                <th scope="row" className="px-3 py-2 text-left font-medium">{agent}</th>
+                                                <td className="px-3 py-2 text-right tabular-nums">{count}</td>
+                                            </tr>
+                                        ))}
+                                        {!totals.agents.length && <tr><td colSpan={2} className="px-3 py-2 text-slate-600">当前条件下没有可统计的主单号。</td></tr>}
+                                    </tbody>
+                                    <tfoot className="border-t border-emerald-100 bg-emerald-50 font-bold text-emerald-950">
+                                        <tr>
+                                            <th scope="row" className="px-3 py-2 text-left">合计</th>
+                                            <td className="px-3 py-2 text-right tabular-nums">{totals.total}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            <p className="text-sm text-slate-600">同一家代理的相同主单号只计一次。</p>
+                        </section>
+                    )}
                     <details className="border-t border-slate-200 pt-3">
                         <summary className="cursor-pointer text-sm font-semibold">代理设置</summary>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
