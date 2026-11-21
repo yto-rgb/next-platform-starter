@@ -3,13 +3,17 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
+        "predev": "node scripts/prepare-ocr.cjs",
         "dev": "next dev",
+        "prebuild": "node scripts/prepare-ocr.cjs",
         "build": "next build",
         "start": "next start",
         "lint": "eslint ."
     },
     "dependencies": {
         "@netlify/blobs": "^8.2.0",
+        "@tesseract.js-data/eng": "1.0.0",
+        "@tesseract.js-data/jpn": "1.0.0",
         "blobshape": "^1.0.0",
         "bright": "^0.8.5",
         "markdown-to-jsx": "^7.4.5",
@@ -17,6 +21,7 @@
         "phosphor-react": "^1.4.1",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
+        "tesseract.js": "6.0.1",
         "unique-names-generator": "^4.7.1"
     },
     "devDependencies": {

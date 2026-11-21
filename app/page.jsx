@@ -2,6 +2,15 @@ import Link from 'next/link';
 
 const tools = [
     {
+        href: '/awb',
+        title: '截图提取主单号',
+        label: '图片识别',
+        description: '粘贴多张表格截图，按日期和代理提取主单号、件数或 SF。',
+        accent: 'bg-sky-500',
+        surface: 'bg-sky-50 text-sky-800',
+        detail: '截图 / 主单号 / SF'
+    },
+    {
         href: '/adress',
         title: '邮编配送关系表',
         label: 'Excel 转换',
@@ -57,7 +66,7 @@ export default function Home() {
                             </span>
                             <h1 className="mt-4 text-3xl font-bold text-slate-950 sm:text-4xl">内部工具台</h1>
                             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                集中放置日常 Excel 处理工具。选择需要的流程，上传文件后在浏览器内完成转换与导出。
+                                选择工作流程，在浏览器内处理 Excel 文件或表格截图。
                             </p>
                         </div>
 
