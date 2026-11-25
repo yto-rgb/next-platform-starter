@@ -3,6 +3,14 @@ export const DEFAULT_NY_KEYWORD = '自';
 
 export const normalize = value => String(value ?? '').normalize('NFKC').trim();
 
+export function agentCode(value) {
+    return normalize(value).toUpperCase().replace(/\s/g, '').replace(/[‐‑–—]/g, '-');
+}
+
+export function configuredAgents(agentList) {
+    return new Set(agentList.split(/[\n,，、]+/).map(agentCode).filter(Boolean));
+}
+
 export function dateKey(value) {
     const date = normalize(value).replace(/\s/g, '').replace(/年|月/g, '/').replace(/日$/, '');
     const match = date.match(/^(?:(\d{4})[-/.])?(\d{1,2})[-/.](\d{1,2})$/);
@@ -39,14 +47,14 @@ export function dateLabel(key) {
 }
 
 export function extractRows(rows, date, agentList, nyKeyword) {
-    const agents = new Set(agentList.split(/[\n,，、]+/).map(value => normalize(value).toUpperCase()).filter(Boolean));
+    const agents = configuredAgents(agentList);
     const keyword = normalize(nyKeyword).replace(/\s/g, '');
     const results = [];
     const issues = [];
     const seen = new Set();
 
     for (const row of rows) {
-        const agent = normalize(row.agent).toUpperCase().replace(/\s/g, '').replace(/[‐‑–—]/g, '-');
+        const agent = agentCode(row.agent);
         const recordedDate = dateKey(row.date);
         if (!agents.has(agent) || (recordedDate && date && date !== recordedDate)) continue;
         if (!recordedDate) {

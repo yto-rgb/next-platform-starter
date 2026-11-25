@@ -114,7 +114,7 @@ export default function AwbTool() {
                 try {
                     const found = await recognizeScreenshot(image.file, workers, column => {
                         setStatus(`正在识别第 ${index + 1} / ${files.length} 张 · ${column}`);
-                    });
+                    }, agents);
                     if (!found.length) failed.push(`第 ${index + 1} 张没有识别到文字，请检查截图清晰度。`);
                     recognized.push(...found.map(row => ({ ...row, id: `${image.id}-${row.index}`, image: index + 1 })));
                 } catch (error) {

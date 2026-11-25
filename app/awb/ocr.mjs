@@ -1,5 +1,5 @@
 import { detectCells, makeStrip, readStripWords } from './grid.mjs';
-import { dateKey, hasSfMarker, masterNumber, numbersInNote, passesAwbCheck } from './rules.mjs';
+import { agentCode, configuredAgents, dateKey, DEFAULT_AGENTS, hasSfMarker, masterNumber, numbersInNote, passesAwbCheck } from './rules.mjs';
 
 export const OCR_COLUMNS = [
     { key: 'date', whitelist: '0123456789/-.', name: '日期' },
@@ -45,9 +45,10 @@ function canvasFor(strip) {
     return canvas;
 }
 
-export async function recognizeGrid(image, { latin, japanese }, encode, onColumn = () => {}) {
+export async function recognizeGrid(image, { latin, japanese }, encode, onColumn = () => {}, agentList = DEFAULT_AGENTS) {
     const cells = detectCells(image);
     const rows = cells.map((_, index) => ({ index, uncertain: false }));
+    const agents = configuredAgents(agentList);
 
     for (const [columnIndex, column] of OCR_COLUMNS.entries()) {
         onColumn(column.name);
@@ -71,8 +72,13 @@ export async function recognizeGrid(image, { latin, japanese }, encode, onColumn
     }
 
     const visibleRows = rows.filter(row => row.date || row.agent || row.master || row.note);
-    onColumn('核验主单号');
+    onColumn('核验代理和主单号');
     for (const row of visibleRows) {
+        if (agents.size && !agents.has(agentCode(row.agent))) {
+            const retry = await rereadCell(image, cells[row.index][2], latin, encode, OCR_COLUMNS[2].whitelist, '8', 4);
+            const code = agentCode(retry);
+            if (agents.has(code)) row.agent = code;
+        }
         if (!row.agent) continue;
         if (!dateKey(row.date)) {
             const retry = await rereadCell(image, cells[row.index][0], latin, encode, OCR_COLUMNS[0].whitelist, '7', 3);
@@ -127,6 +133,6 @@ function retryNumber(image, cell, worker, encode, mode) {
     return rereadCell(image, cell, worker, encode, '0123456789-', mode, 3, 85);
 }
 
-export async function recognizeScreenshot(file, workers, onColumn) {
-    return recognizeGrid(await readImage(file), workers, canvasFor, onColumn);
+export async function recognizeScreenshot(file, workers, onColumn, agentList) {
+    return recognizeGrid(await readImage(file), workers, canvasFor, onColumn, agentList);
 }
